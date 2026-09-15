@@ -24,3 +24,66 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* Markdown 样式 */
+.prose pre {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.prose code {
+  font-size: 13px;
+}
+
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+
+.prose th, .prose td {
+  border: 1px solid #ddd;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.prose th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+/* 打字动画 */
+@keyframes bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-bounce {
+  animation: bounce 1.4s infinite ease-in-out;
+}
+/* 表格横向滚动优化 */
+.prose .overflow-x-auto {
+  margin: 8px 0;
+}
+
+.prose .overflow-x-auto::-webkit-scrollbar {
+  height: 6px;
+}
+.prose .overflow-x-auto::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 4px;
+}
+
+/* 确保表格不塌陷 */
+.prose table {
+  white-space: nowrap; /* 防止表格内文字强制换行导致挤压 */
+}
+.prose table { white-space: nowrap; }
+.overflow-x-auto::-webkit-scrollbar { height: 6px; }
+.overflow-x-auto::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 4px; }
