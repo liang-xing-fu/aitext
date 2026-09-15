@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { registerTool } from '@/lib/tools'
+import { registerTool } from '@/lib/tools-client'
 
 export default function TestToolsPage() {
   const [logs, setLogs] = useState<string[]>([])

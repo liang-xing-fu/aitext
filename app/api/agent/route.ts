@@ -1,7 +1,7 @@
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 import { searchDocuments, getDocumentCount } from '@/lib/knowledge-base'
-import { getToolsForAPI, executeToolByName } from '@/lib/tools'
+import { getToolsForAPI, executeToolByName } from '@/lib/tools-client'
 // 内存向量存储（跟 RAG 共用）
 let documents: { text: string; embedding: number[] }[] = []
 // 会话记忆存储（key: sessionId, value: messages[]）
@@ -84,10 +84,8 @@ export async function POST(req: NextRequest) {
 
     // 如果模型决定调工具
     if (msg.tool_calls && msg.tool_calls.length > 0) {
-      const toolResults = []
-
       // 在执行工具的地方：
-      for (const call of msg.tool_calls) {
+      const toolPromises = msg.tool_calls.map(async (call: any) => {
         const name = call.function.name
         const args = JSON.parse(call.function.arguments)
         console.log(`调用工具: ${name}`, args)
@@ -95,12 +93,15 @@ export async function POST(req: NextRequest) {
         const result = await executeToolByName(name, args)
         console.log(`工具返回:`, result)
 
-        toolResults.push({
-          role: 'tool',
+        return {
+          role: 'tool' as const,
           tool_call_id: call.id,
           content: result
-        })
-      }
+        }
+      })
+
+      // 等待所有工具执行完毕
+      const toolResults = await Promise.all(toolPromises)
 
       // 第二轮：把工具结果喂回给模型
       const finalMessages = [

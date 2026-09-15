@@ -1,0 +1,39 @@
+[
+  {
+    "name": "get_current_time",
+    "description": "获取当前时间",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "calculate",
+    "description": "计算数学表达式",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "string",
+          "description": "数学表达式，如 \"1+2 * 3\""
+        }
+      },
+      "required": ["expression"]
+    }
+  },
+  {
+    "name": "search_knowledge_base",
+    "description": "搜索知识库，查找与问题相关的文档内容",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "搜索关键词或问题"
+        }
+      },
+      "required": ["query"]
+    }
+  }
+]
