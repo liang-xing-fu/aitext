@@ -27,6 +27,43 @@ const defaultHandlers: Record<string, (args: any) => string | Promise<string>> =
     const { searchDocuments } = require('./knowledge-base')
     const result = searchDocuments(args.query)
     return result || '知识库为空，请先上传文档'
+  },
+  get_weather: async (args) => {
+    // 模拟天气查询（实际可接真实 API）
+    const weatherData: Record<string, number> = {
+      '北京': 22,
+      '上海': 28,
+      '广州': 32,
+      '深圳': 30,
+      '杭州': 25,
+      '成都': 26,
+      '武汉': 29,
+      '西安': 24
+    }
+    const temp = weatherData[args.city]
+    if (temp === undefined) {
+      return `暂未收录 ${args.city} 的天气数据`
+    }
+    return `${args.city} 当前气温 ${temp}°C`
+  },
+
+  recommend_outfit: (args) => {
+    const temp = args.temperature
+    let suggestion = ''
+    if (temp >= 35) {
+      suggestion = '短袖短裤，注意防暑，随身带水'
+    } else if (temp >= 28) {
+      suggestion = '短袖短裤或连衣裙，透气为主'
+    } else if (temp >= 22) {
+      suggestion = '短袖配薄外套，早晚微凉'
+    } else if (temp >= 16) {
+      suggestion = '长袖衬衫或卫衣，搭配牛仔裤'
+    } else if (temp >= 10) {
+      suggestion = '薄毛衣或夹克，注意保暖'
+    } else {
+      suggestion = '厚羽绒服，围巾手套必备'
+    }
+    return `${args.city} 当前 ${temp}°C，建议穿搭：${suggestion}`
   }
 }
 
