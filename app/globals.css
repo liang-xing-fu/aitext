@@ -87,3 +87,131 @@ body {
 .prose table { white-space: nowrap; }
 .overflow-x-auto::-webkit-scrollbar { height: 6px; }
 .overflow-x-auto::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 4px; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 平滑滚动 */
+html {
+  scroll-behavior: smooth;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(75, 85, 99, 0.5);
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-bounce {
+  animation: bounce 1s infinite;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Markdown 样式优化 */
+.prose pre {
+  border-radius: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.prose code {
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.25rem;
+}
+
+.prose img {
+  border-radius: 0.5rem;
+}
+
+.prose table {
+  font-size: 0.875rem;
+}
+
+.prose th {
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.dark .prose th {
+  background-color: rgba(55, 65, 81, 0.5);
+}
+
+/* 消息气泡悬停效果 */
+.hover\:shadow-lg:hover {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+}
+
+.hover\:shadow-md:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+.dark .hover\:shadow-lg:hover {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.dark .hover\:shadow-md:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
