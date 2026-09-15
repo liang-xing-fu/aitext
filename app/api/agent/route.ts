@@ -1,6 +1,7 @@
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 import { searchDocuments, getDocumentCount } from '@/lib/knowledge-base'
+import { getToolsForAPI, executeToolByName } from '@/lib/tools'
 // 内存向量存储（跟 RAG 共用）
 let documents: { text: string; embedding: number[] }[] = []
 // 会话记忆存储（key: sessionId, value: messages[]）
@@ -13,55 +14,8 @@ function getOrCreateSession(sessionId: string) {
   return sessions.get(sessionId)!
 }
 
-// 定义工具
-const tools = [
-  {
-    type: 'function',
-    function: {
-      name: 'get_current_time',
-      description: '获取当前时间',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: []
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'calculate',
-      description: '计算数学表达式',
-      parameters: {
-        type: 'object',
-        properties: {
-          expression: {
-            type: 'string',
-            description: '数学表达式，如 "1+2 * 3"'
-          }
-        },
-        required: ['expression']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'search_knowledge_base',
-      description: '搜索知识库，查找与问题相关的文档内容。当你需要回答关于公司政策、产品说明、技术文档等问题时使用。',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: '搜索关键词或问题'
-          }
-        },
-        required: ['query']
-      }
-    }
-  }
-]
+// 原来硬编码的 tools 数组删除，改成：
+const tools = getToolsForAPI()
 
 // 工具执行函数
 function executeTool(name: string, args: any): string {
@@ -132,12 +86,13 @@ export async function POST(req: NextRequest) {
     if (msg.tool_calls && msg.tool_calls.length > 0) {
       const toolResults = []
 
+      // 在执行工具的地方：
       for (const call of msg.tool_calls) {
         const name = call.function.name
         const args = JSON.parse(call.function.arguments)
         console.log(`调用工具: ${name}`, args)
 
-        const result = executeTool(name, args)
+        const result = await executeToolByName(name, args)
         console.log(`工具返回:`, result)
 
         toolResults.push({
