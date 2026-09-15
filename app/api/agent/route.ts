@@ -218,17 +218,45 @@ export async function POST(req: NextRequest) {
       //   success: true,
       //   message: finalData.choices[0].message.content
       // })
+    } 
+    // ✅ 关键：模型直接回答也必须流式（否则前端等很久）
+    else {
+      const directResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'deepseek-chat', messages: [systemPrompt, ...history], stream: true })
+      })
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          const reader = directResponse.body!.getReader()
+          const decoder = new TextDecoder()
+          let fullContent = '', buffer = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const parts = buffer.split('\n\n'); buffer = parts.pop() || ''
+            for (const part of parts) {
+              const line = part.trim()
+              if (!line.startsWith('data: ')) continue
+              const jsonStr = line.slice(6)
+              if (jsonStr === '[DONE]') continue
+              try {
+                const json = JSON.parse(jsonStr)
+                const delta = json.choices[0]?.delta?.content || ''
+                if (delta) {
+                  fullContent += delta
+                  controller.enqueue(encoder.encode(JSON.stringify({ content: delta }) + '\n'))
+                }
+              } catch {}
+            }
+          }
+          history.push({ role: 'assistant', content: fullContent })
+          controller.close()
+        }
+      })
+      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } })
     }
-
-    // 模型直接回答
-    const answer = msg.content
-    // ✅ 保存助手回复到历史
-    history.push({ role: 'assistant', content: answer })
-    
-    return Response.json({
-      success: true,
-      message: answer
-    })
 
   } catch (e: any) {
     console.error('Agent 错误:', e)
