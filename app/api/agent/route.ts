@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = {
       role: 'system',
-      content: `你是一个智能助手${memoryContext}，必须使用工具来回答问题。
+      content: `你是一个智能助手${memoryContext}，优先使用工具，如果没有合适的工具，你可以根据自己的知识回答。
 
 可用工具：
 1. get_current_time - 获取当前时间
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 5. recommend_outfit - 根据温度推荐穿搭，参数 temperature 为温度值，city 为城市名
 
 规则：
-- 对于用户的每一个请求，你必须调用相应的工具来获取信息
+- 对于用户的每一个请求，你优先调用相应的工具来获取信息
 - 如果用户问天气，先调用 get_weather 获取温度，然后把温度传给 recommend_outfit 获取穿搭建议
 - 如果用户问时间，调用 get_current_time
 - 如果用户要计算，调用 calculate
