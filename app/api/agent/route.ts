@@ -4,6 +4,7 @@ import { searchDocuments, getDocumentCount } from '@/lib/knowledge-base'
 import { getToolsForAPI, executeToolByName } from '@/lib/tools-server'
 import { loadSession, saveSession } from '@/lib/session-store'
 import { loadUserMemory, extractAndUpdateMemory } from '@/lib/user-memory'
+
 const sessions = new Map<string, { role: string; content: string }[]>()
 
 // 替换原来的 getOrCreateSession
@@ -23,38 +24,38 @@ export async function POST(req: NextRequest) {
   try {
     const { sessionId, message } = await req.json()
 
-  // 加载用户的长期记忆（用 sessionId 作为 userId，实际项目应该用真正的用户ID）
-  const userMemories = loadUserMemory(sessionId)
-  const memoryContext = userMemories.length > 0 
-  ? `\n\n关于用户已知信息：\n${userMemories.map(m => `- ${m}`).join('\n')}`
-  : ''
+    // 加载用户的长期记忆
+    const userMemories = loadUserMemory(sessionId)
+    const memoryContext = userMemories.length > 0 
+      ? `\n\n关于用户已知信息：\n${userMemories.map(m => `- ${m}`).join('\n')}`
+      : ''
+
     const apiKey = process.env.DEEPSEEK_API_KEY
     if (!sessionId) {
       return Response.json({ success: false, message: '缺少 sessionId' })
     }
     
     const history = getOrCreateSession(sessionId)
-
     history.push({ role: 'user', content: message })
 
     const systemPrompt = {
       role: 'system',
       content: `你是一个智能助手${memoryContext}，必须使用工具来回答问题。
 
-      可用工具：
-      1. get_current_time - 获取当前时间
-      2. calculate - 数学计算，参数 expression 为数学表达式
-      3. search_knowledge_base - 搜索知识库，参数 query 为搜索关键词
-      4. get_weather - 查询天气，参数 city 为城市名
-      5. recommend_outfit - 根据温度推荐穿搭，参数 temperature 为温度值，city 为城市名
+可用工具：
+1. get_current_time - 获取当前时间
+2. calculate - 数学计算，参数 expression 为数学表达式
+3. search_knowledge_base - 搜索知识库，参数 query 为搜索关键词
+4. get_weather - 查询天气，参数 city 为城市名
+5. recommend_outfit - 根据温度推荐穿搭，参数 temperature 为温度值，city 为城市名
 
-      规则：
-      - 对于用户的每一个请求，你必须调用相应的工具来获取信息
-      - 如果用户问天气，先调用 get_weather 获取温度，然后把温度传给 recommend_outfit 获取穿搭建议
-      - 如果用户问时间，调用 get_current_time
-      - 如果用户要计算，调用 calculate
-      - 如果用户问知识库内容，调用 search_knowledge_base
-      - 不要自己编造答案，必须依赖工具返回的结果`
+规则：
+- 对于用户的每一个请求，你必须调用相应的工具来获取信息
+- 如果用户问天气，先调用 get_weather 获取温度，然后把温度传给 recommend_outfit 获取穿搭建议
+- 如果用户问时间，调用 get_current_time
+- 如果用户要计算，调用 calculate
+- 如果用户问知识库内容，调用 search_knowledge_base
+- 不要自己编造答案，必须依赖工具返回的结果`
     }
 
     // 第一轮：强制调工具
@@ -125,7 +126,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 到这里已经没有工具调用了，开始流式输出最终答案
-    // 注意：如果 msg 还有 tool_calls（超过最大轮数），忽略它直接输出
     if (!msg.content) {
       msg.content = '抱歉，无法获取到有效信息。'
     }
@@ -183,10 +183,14 @@ export async function POST(req: NextRequest) {
         controller.close()
       }
     })
+
+    // 保存会话到文件
     saveSession(sessionId, history)
-    // 在返回之前，异步提取新记忆
+    
+    // 异步提取新记忆
     const lastMessages = history.slice(-4).map(m => `${m.role}: ${m.content}`).join('\n')
     extractAndUpdateMemory(sessionId, lastMessages).catch(console.error)
+
     return new Response(stream, {
       headers: { 'Content-Type': 'text/event-stream' }
     })
