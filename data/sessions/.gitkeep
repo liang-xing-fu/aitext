@@ -1,0 +1,4 @@
+mkdir -p data/sessions
+touch data/sessions/.gitkeep
+mkdir -p data/memories
+touch data/memories/.gitkeep

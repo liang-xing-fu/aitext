@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 # local env files
 .env*.local
+# 会话数据
+data/sessions/*
+!data/sessions/.gitkeep
+# 用户画像
+data/memories/*
+!data/memories/.gitkeep
