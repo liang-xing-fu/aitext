@@ -31,37 +31,38 @@ export default function AgentPage() {
   const [isStreaming, setIsStreaming] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const sessionId = useRef(generateSessionId())
-// 在组件内，useEffect 部分添加
-useEffect(() => {
+
   // 页面加载时获取历史
-  fetch(`/api/history?sessionId=${sessionId.current}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.messages.length > 0) {
-        setMessages(data.messages)
-      }
-    })
-    .catch(err => console.error('加载历史失败:', err))
-}, [])
+  useEffect(() => {
+    fetch(`/api/history?sessionId=${sessionId.current}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.messages.length > 0) {
+          setMessages(data.messages)
+        }
+      })
+      .catch(err => console.error('加载历史失败:', err))
+  }, [])
+
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return
-
-    const userMessage: Message = {
-      role: 'user',
-      content: input,
-      timestamp: new Date().toLocaleTimeString()
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
+  // 发送请求的核心函数
+  const retrySend = async (content: string) => {
     setIsLoading(true)
     setIsStreaming(true)
     setError(null)
+
+    // 删除上一条失败的 assistant 空消息（如果有的话）
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (last && last.role === 'assistant' && last.content === '') {
+        return prev.slice(0, -1)
+      }
+      return prev
+    })
 
     try {
       const response = await fetch('/api/agent', {
@@ -69,12 +70,18 @@ useEffect(() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: sessionId.current,
-          message: userMessage.content
+          message: content
         })
       })
 
       if (!response.ok) {
         throw new Error(`服务器错误: ${response.status}`)
+      }
+
+      const contentType = response.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || '服务器返回错误')
       }
 
       const reader = response.body!.getReader()
@@ -121,21 +128,37 @@ useEffect(() => {
         }
       }
     } catch (e: any) {
-      debugger
-      console.log('2333')
       setError(e.message || '请求失败，请重试')
-      setIsLoading(false)
-      setIsStreaming(false)
     }
+
+    setIsLoading(false)
+    setIsStreaming(false)
+  }
+
+  const sendMessage = async () => {
+    if (!input.trim() || isLoading) return
+
+    const userMessage: Message = {
+      role: 'user',
+      content: input,
+      timestamp: new Date().toLocaleTimeString()
+    }
+
+    setMessages(prev => [...prev, userMessage])
+    setInput('')
+    
+    retrySend(userMessage.content)
   }
 
   const handleRetry = () => {
     setError(null)
-    // 重新发送最后一条用户消息
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
-    if (lastUserMsg) {
-      setInput(lastUserMsg.content)
-    }
+    
+    // 找到最后一条用户消息
+    const lastUserEntry = [...messages].reverse().find(m => m.role === 'user')
+    if (!lastUserEntry) return
+
+    // 直接用这条消息重新发送，不删除任何现有消息
+    retrySend(lastUserEntry.content)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -199,6 +222,7 @@ useEffect(() => {
             </div>
           </div>
         ))}
+
         {/* AI 思考动画 */}
         {isLoading && !messages.some(m => m.role === 'assistant' && m.content === '') && (
           <div className="flex justify-start">
@@ -214,6 +238,7 @@ useEffect(() => {
             </div>
           </div>
         )}
+
         {/* 错误提示 */}
         {error && (
           <div className="flex justify-center">
