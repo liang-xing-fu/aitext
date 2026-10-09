@@ -7,14 +7,11 @@ import { loadUserMemory, extractAndUpdateMemory } from '@/lib/user-memory'
 
 const sessions = new Map<string, { role: string; content: string }[]>()
 
-// 替换原来的 getOrCreateSession
 function getOrCreateSession(sessionId: string) {
-  // 先从文件加载
   const saved = loadSession(sessionId)
   if (saved) {
     return saved
   }
-  // 不存在则创建新的空历史
   return []
 }
 
@@ -37,7 +34,8 @@ export async function POST(req: NextRequest) {
     
     const history = getOrCreateSession(sessionId)
     history.push({ role: 'user', content: message })
-    // 在构建 system prompt 前
+
+    // 构建知识库上下文
     let knowledgeContext = ''
     if (message) {
       const kbResult = searchDocuments(message)
@@ -45,6 +43,7 @@ export async function POST(req: NextRequest) {
         knowledgeContext = `\n\n以下是相关的知识库内容，请基于这些内容回答用户问题：\n${kbResult}`
       }
     }
+
     const systemPrompt = {
       role: 'system',
       content: `你是一个智能助手${memoryContext}，优先使用工具，如果没有合适的工具，${knowledgeContext}
@@ -66,7 +65,7 @@ export async function POST(req: NextRequest) {
 - 不要自己编造答案，必须依赖工具返回的结果`
     }
 
-    // 第一轮：强制调工具
+    // 第一轮：让模型决定是否调工具
     const firstResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -77,15 +76,14 @@ export async function POST(req: NextRequest) {
         model: 'deepseek-chat',
         messages: [systemPrompt, ...history],
         tools,
-        tool_choice: 'required'
+        tool_choice: 'auto'
       })
     })
 
     const firstData = await firstResponse.json()
-    // 第一处：取 message 对象
     let msg = firstData?.choices?.[0]?.message
     if (!msg) {
-      msg = { role: 'assistant', content: '未获取到回答' }
+      msg = { role: 'assistant', content: '模型未返回结果' }
     }
 
     // 多轮工具调用循环
@@ -101,7 +99,7 @@ export async function POST(req: NextRequest) {
 
       const toolPromises = msg.tool_calls.map(async (call: any) => {
         const name = call.function.name
-        const args = JSON.parse(call.function.arguments)
+        const args = JSON.parse(call.function.arguments || '{}')
         console.log(`[第${currentRound + 1}轮] 调用工具: ${name}`, args)
 
         const result = await executeToolByName(name, args)
@@ -110,14 +108,14 @@ export async function POST(req: NextRequest) {
         return {
           role: 'tool' as const,
           tool_call_id: call.id,
-          content: result
+          content: String(result)
         }
       })
 
       const toolResults = await Promise.all(toolPromises)
       history.push(...toolResults)
 
-      // 后续轮次用 auto，让模型自己决定是否还需要调工具
+      // 继续请求，让模型决定是否需要更多工具
       const nextResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -135,17 +133,20 @@ export async function POST(req: NextRequest) {
       const nextData = await nextResponse.json()
       msg = nextData?.choices?.[0]?.message
       if (!msg) {
-        msg = { role: 'assistant', content: '未获取到回答' }
+        msg = { role: 'assistant', content: '模型未返回结果' }
       }
       currentRound++
     }
 
-    // 到这里已经没有工具调用了，开始流式输出最终答案
+    // 到这里已经没有工具调用了，msg 应该包含最终的自然语言回答
+    // 如果 msg 没有 content，补充默认回复
     if (!msg.content) {
       msg.content = '抱歉，无法获取到有效信息。'
     }
+
     history.push(msg)
 
+    // 最终流式输出
     const finalResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
 
             try {
               const json = JSON.parse(jsonStr)
-              const delta = json.choices[0]?.delta?.content || ''
+              const delta = json.choices?.[0]?.delta?.content || ''
               if (delta) {
                 fullContent += delta
                 controller.enqueue(encoder.encode(JSON.stringify({ content: delta }) + '\n'))
@@ -194,7 +195,15 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        history.push({ role: 'assistant', content: fullContent })
+        // 流式结束时，用 fullContent 更新历史记录
+        if (fullContent) {
+          // 替换最后一条 assistant 消息为完整内容
+          if (history[history.length - 1]?.role === 'assistant') {
+            history[history.length - 1] = { role: 'assistant', content: fullContent }
+          } else {
+            history.push({ role: 'assistant', content: fullContent })
+          }
+        }
         controller.close()
       }
     })
