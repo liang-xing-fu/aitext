@@ -1,78 +1,130 @@
 // 共享知识库模块
-let documents: { text: string; embedding: number[] }[] = []
+interface DocumentChunk {
+  text: string
+  embedding: Map<string, number>
+}
 
-function simpleEmbed(text: string): number[] {
-  const words = text.toLowerCase().split(/[\s,，。！？、；：""''（）()【】《》\n\r]+/)
-  const wordSet = new Set(words.filter(w => w.length > 0))
-  return Array.from(wordSet).map(w => {
-    let hash = 0
-    for (let i = 0; i < w.length; i++) {
-      hash = ((hash << 5) - hash) + w.charCodeAt(i)
-      hash |= 0
+class KnowledgeBase {
+  private documents: DocumentChunk[] = []
+
+  private tokenize(text: string): string[] {
+    return text
+      .toLowerCase()
+      .split(/[\s,，。！？、；：""''（）()【】《》\n\r]+/)
+      .filter(w => w.length > 0)
+  }
+
+  private embed(text: string): Map<string, number> {
+    const vec = new Map<string, number>()
+    for (const w of this.tokenize(text)) {
+      vec.set(w, (vec.get(w) ?? 0) + 1)
     }
-    return hash / 2147483647
-  })
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dotProduct = 0
-  let normA = 0
-  let normB = 0
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    dotProduct += (a[i] || 0) * (b[i] || 0)
-    normA += (a[i] || 0) * (a[i] || 0)
-    normB += (b[i] || 0) * (b[i] || 0)
+    return vec
   }
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB) || 1)
-}
 
-function chunkText(text: string, chunkSize = 200): string[] {
-  const sentences = text.split(/[。！？\n]/)
-  const chunks: string[] = []
-  let current = ''
-  
-  for (const sentence of sentences) {
-    if ((current + sentence).length > chunkSize && current.length > 0) {
-      chunks.push(current.trim())
-      current = sentence
-    } else {
-      current += sentence + '。'
+  private cosine(a: Map<string, number>, b: Map<string, number>): number {
+    let dot = 0, na = 0, nb = 0
+    for (const [k, v] of a) {
+      na += v * v
+      if (b.has(k)) dot += v * (b.get(k) as number)
     }
+    for (const [, v] of b) nb += v * v
+    return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1)
   }
-  if (current.trim()) {
-    chunks.push(current.trim())
+  private similarity(query: string, doc: string): number {
+    const q = query.toLowerCase()
+    const d = doc.toLowerCase()
+    
+    // 1. 精确子串匹配：查询词出现在文档中
+    if (d.includes(q)) {
+      return 1.0
+    }
+    
+    // 2. 词重叠匹配
+    const qWords = this.tokenize(query)
+    const dWords = this.tokenize(doc)
+    
+    if (qWords.length === 0 || dWords.length === 0) return 0
+    
+    // 计算有多少查询词出现在了文档词中
+    let matchCount = 0
+    for (const qw of qWords) {
+      if (dWords.some(dw => dw.includes(qw) || qw.includes(dw))) {
+        matchCount++
+      }
+    }
+    
+    return matchCount / qWords.length
   }
-  return chunks.filter(c => c.length > 10)
+  private chunkText(text: string): string[] {
+    return text
+      .split(/\n+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 10)
+  }
+
+  loadDocument(text: string) {
+    const chunks = this.chunkText(text)
+    this.documents = chunks.map(chunk => ({
+      text: chunk,
+      embedding: this.embed(chunk)
+    }))
+    return this.documents.length
+  }
+
+  appendDocument(text: string) {
+    const chunks = this.chunkText(text)
+    const newDocs = chunks.map(chunk => ({
+      text: chunk,
+      embedding: this.embed(chunk)
+    }))
+    this.documents.push(...newDocs)
+    return this.documents.length
+  }
+
+  searchDocuments(query: string, topK = 3): string {
+    if (this.documents.length === 0) return ''
+    
+    const results = this.documents
+      .map(doc => ({
+        text: doc.text,
+        score: this.similarity(query, doc.text)
+      }))
+      .sort((a, b) => b.score - a.score)
+      .filter(r => r.score > 0)
+      .slice(0, topK)
+
+    if (results.length === 0) return ''
+    return results.map(r => r.text).join('\n---\n')
+  }
+
+  clearDocuments() {
+    this.documents = []
+  }
+
+  getDocumentCount() {
+    return this.documents.length
+  }
 }
+
+const kb = new KnowledgeBase()
 
 export function loadDocument(text: string) {
-  const chunks = chunkText(text)
-  documents = chunks.map(chunk => ({
-    text: chunk,
-    embedding: simpleEmbed(chunk)
-  }))
-  return documents.length
+  return kb.loadDocument(text)
 }
 
-export function searchDocuments(query: string, topK = 3): string {
-  if (documents.length === 0) return ''
-  
-  const queryEmbedding = simpleEmbed(query)
-  const results = documents
-    .map(doc => ({
-      text: doc.text,
-      score: cosineSimilarity(queryEmbedding, doc.embedding)
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK)
+export function appendDocument(text: string) {
+  return kb.appendDocument(text)
+}
 
-  return results.map(r => r.text).join('\n---\n')
+export function searchDocuments(query: string, topK?: number) {
+  return kb.searchDocuments(query, topK)
 }
 
 export function clearDocuments() {
-  documents = []
+  kb.clearDocuments()
 }
 
 export function getDocumentCount() {
-  return documents.length
+  return kb.getDocumentCount()
 }

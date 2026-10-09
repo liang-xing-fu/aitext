@@ -37,10 +37,18 @@ export async function POST(req: NextRequest) {
     
     const history = getOrCreateSession(sessionId)
     history.push({ role: 'user', content: message })
-
+    // 在构建 system prompt 前
+    let knowledgeContext = ''
+    if (message) {
+      const kbResult = searchDocuments(message)
+      if (kbResult) {
+        knowledgeContext = `\n\n以下是相关的知识库内容，请基于这些内容回答用户问题：\n${kbResult}`
+      }
+    }
     const systemPrompt = {
       role: 'system',
-      content: `你是一个智能助手${memoryContext}，优先使用工具，如果没有合适的工具，你可以根据自己的知识回答。
+      content: `你是一个智能助手${memoryContext}，优先使用工具，如果没有合适的工具，${knowledgeContext}
+      知识库中也没有，你就可以根据自己的知识回答。
 
 可用工具：
 1. get_current_time - 获取当前时间

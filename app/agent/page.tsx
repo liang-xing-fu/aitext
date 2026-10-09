@@ -3,7 +3,12 @@
 import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-
+declare global {
+  interface Window {
+    SpeechRecognition: any
+    webkitSpeechRecognition: any
+  }
+}
 // 生成唯一 sessionId
 function generateSessionId() {
   if (typeof window !== 'undefined') {
@@ -29,9 +34,10 @@ export default function AgentPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isListening, setIsListening] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const sessionId = useRef(generateSessionId())
-
   // 页面加载时获取历史
   useEffect(() => {
     fetch(`/api/history?sessionId=${sessionId.current}`)
@@ -48,6 +54,99 @@ export default function AgentPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // 文件上传
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const res = await fetch('/api/rag', {
+        method: 'POST',
+        body: formData
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `✅ 已导入文件「${file.name}」到知识库，${data.message}`,
+          timestamp: new Date().toLocaleTimeString()
+        }])
+      } else {
+        alert(data.message || '上传失败')
+      }
+    } catch (err) {
+      alert('上传失败，请重试')
+    }
+
+    setIsUploading(false)
+    e.target.value = ''
+  }
+
+  const recognitionRef = useRef<any>(null)
+
+  const startListening = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('您的浏览器不支持语音输入，请使用 Chrome 浏览器')
+      return
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'zh-CN'
+    recognition.interimResults = true
+    recognition.continuous = true
+    recognitionRef.current = recognition
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      console.log('语音识别已启动')
+    }
+
+    recognition.onresult = (event: any) => {
+      console.log('语音识别结果:', event.results)
+      let finalTranscript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript
+        }
+      }
+      if (finalTranscript) {
+        console.log('最终识别文本:', finalTranscript)
+        setInput(prev => prev + finalTranscript)
+        recognition.stop()
+      }
+    }
+
+    recognition.onerror = (event: any) => {
+      console.log('语音识别错误:', event.error)
+      setIsListening(false)
+      recognitionRef.current = null
+    }
+
+    recognition.onend = () => {
+      console.log('语音识别结束')
+      setIsListening(false)
+      recognitionRef.current = null
+    }
+
+    // 10 秒超时保护
+    setTimeout(() => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+        setIsListening(false)
+        recognitionRef.current = null
+      }
+    }, 10000)
+
+    recognition.start()
+  }
 
   // 发送请求的核心函数
   const retrySend = async (content: string) => {
@@ -260,6 +359,43 @@ export default function AgentPage() {
       {/* 输入区域 */}
       <div className="border-t dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-4">
         <div className="max-w-4xl mx-auto flex gap-3">
+          {/* 文件上传按钮 */}
+          <label className={`px-3 py-3 rounded-xl cursor-pointer transition-colors
+                            ${isUploading 
+                              ? 'bg-blue-100 dark:bg-blue-900 opacity-50' 
+                              : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`}
+                 title="上传文件到知识库">
+            <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+            <input
+              type="file"
+              accept=".txt,.md,.pdf,.docx"
+              onChange={handleFileUpload}
+              className="hidden"
+              disabled={isUploading}
+            />
+          </label>
+
+          {/* 语音输入按钮 */}
+          <button
+            onClick={startListening}
+            disabled={isLoading || isListening}
+            className={`px-3 py-3 rounded-xl transition-colors ${
+              isListening
+                ? 'bg-red-500 text-white animate-pulse'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            } disabled:opacity-50`}
+            title="语音输入"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          </button>
+
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
