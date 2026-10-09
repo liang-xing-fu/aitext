@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     })
 
     const firstData = await firstResponse.json()
-    let msg = firstData.choices[0].message
+    let msg = firstData?.choices?.[0]?.message || '未获取到回答'
 
     // 多轮工具调用循环
     let maxRounds = 5
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
       })
 
       const nextData = await nextResponse.json()
-      msg = nextData.choices[0].message
+      msg = nextData?.choices?.[0]?.message || '未获取到回答'
       currentRound++
     }
 
